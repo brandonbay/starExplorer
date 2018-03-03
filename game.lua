@@ -140,10 +140,11 @@ local function dragShip(event)
 end
 
 local function endGame()
-	composer.gotoScene('menu', { time=800, effect='crossFade' })
+	composer.setVariable('finalScore', score)
+	composer.gotoScene('highscores', { time=800, effect='crossFade' })
 end
 
-local function keyControlShip(event)
+local function handleKeypress(event)
 	if (event.phase == 'up' and event.keyName == 'back') then
 		endGame()
 		return true
@@ -289,7 +290,7 @@ function scene:show(event)
 	elseif (phase == 'did') then
 		-- Code here runs when the scene is entirely on screen
 		physics.start()
-		Runtime:addEventListener('key', keyControlShip)
+		Runtime:addEventListener('key', handleKeypress)
 		Runtime:addEventListener('collision', onCollision)
 		gameLoopTimer = timer.performWithDelay(750, gameLoop, 0)
 	end
@@ -306,7 +307,7 @@ function scene:hide(event)
 	elseif (phase == 'did') then
 		-- Code here runs immediately after the scene goes entirely off screen
 		Runtime:removeEventListener('collision', onCollision)
-		Runtime:removeEventListener('key', keyControlShip)
+		Runtime:removeEventListener('key', handleKeypress)
 		physics.pause()
 		composer.removeScene('game')
 	end
