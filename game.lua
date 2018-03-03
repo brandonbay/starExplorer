@@ -66,6 +66,10 @@ local backGroup
 local mainGroup
 local uiGroup
 
+local explosionSound
+local fireSound
+local musicTrack
+
 local function updateText()
 	livesText.text = 'Lives: ' .. lives
 	scoreText.text = 'Score: ' .. score
@@ -107,6 +111,8 @@ local function createAsteroid()
 end
 
 local function fireLaser()
+		audio.play(fireSound)
+
 		local newLaser = display.newImageRect(mainGroup, objectSheet, 5, 14, 40)
 		physics.addBody( newLaser, 'dynamic', { isSensor=true } )
 		newLaser.isBullet = true
@@ -172,7 +178,9 @@ local function handleKeypress(event)
 			shipVelocityY = shipVelocityY - shipSpeed
 		end
 	end
-	ship:setLinearVelocity(shipVelocityX, shipVelocityY)
+	if (died == false) then
+		ship:setLinearVelocity(shipVelocityX, shipVelocityY)
+	end
 	return true
 end
 
@@ -199,6 +207,8 @@ local function onCollision(event)
 		) then
 			display.remove(obj1)
 			display.remove(obj2)
+			audio.play(explosionSound)
+
 			score = score + 100
 			scoreText.text = 'Score: ' .. score
 
@@ -213,6 +223,8 @@ local function onCollision(event)
 		) then
 			if (died == false) then
 				died = true
+				audio.play(explosionSound)
+
 				lives = lives - 1
 				livesText.text = 'Lives: ' .. lives
 
@@ -278,6 +290,10 @@ function scene:create(event)
 
 	ship:addEventListener('tap', fireLaser)
 	ship:addEventListener('touch', dragShip)
+
+	explosionSound = audio.loadSound('audio/explosion.wav')
+	fireSound = audio.loadSound('audio/fire.wav')
+	musicTrack = audio.loadStream('audio/80s-Space-Game_Looping.wav')
 end
 
 -- show()
@@ -293,6 +309,7 @@ function scene:show(event)
 		Runtime:addEventListener('key', handleKeypress)
 		Runtime:addEventListener('collision', onCollision)
 		gameLoopTimer = timer.performWithDelay(750, gameLoop, 0)
+		audio.play(musicTrack, { channel=1, loops=-1 })
 	end
 end
 
@@ -309,6 +326,7 @@ function scene:hide(event)
 		Runtime:removeEventListener('collision', onCollision)
 		Runtime:removeEventListener('key', handleKeypress)
 		physics.pause()
+		audio.stop(1)
 		composer.removeScene('game')
 	end
 end
@@ -317,6 +335,9 @@ end
 function scene:destroy(event)
 	local sceneGroup = self.view
 	-- Code here runs prior to the removal of scene's view
+		audio.dispose(explosionSound)
+    audio.dispose(fireSound)
+    audio.dispose(musicTrack)
 end
 
 -- -----------------------------------------------------------------------------------
