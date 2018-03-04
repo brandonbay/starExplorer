@@ -1,28 +1,31 @@
 
 local composer = require('composer')
+local json = require('json')
+local physics = require('physics')
 local scene = composer.newScene()
 
--- -----------------------------------------------------------------------------------
--- Code outside of the scene event functions below will only be executed ONCE unless
--- the scene is removed entirely (not recycled) via 'composer.removeScene()'
--- ----------------------------------------------------------------------------------
-
-local musicTrack
-
-local json = require('json')
-local settings = composer.getVariable('settings')
 local filePath = composer.getVariable('filePath')
+local mainGroup
+local musicTrack
+local settings = composer.getVariable('settings')
 local sheetOptions = composer.getVariable('sheetOptions')
-local objectSheet = graphics.newImageSheet( 'gameObjects.png', sheetOptions )
-local physics = require('physics')
+local objectSheet = graphics.newImageSheet('gameObjects.png', sheetOptions)
+
 local firstShip, secondShip, thirdShip
 local shipHighlight
-local mainGroup
+
 physics.start()
 physics.setGravity(0,0)
 
 local function gotoMenu()
   composer.gotoScene('menu', { time=800, effect='crossFade' })
+end
+
+local function handleKeypress(event)
+	if event.phase == 'up' and event.keyName == 'back' then
+		gotoMenu()
+		return true
+	end
 end
 
 local function saveSettings()
@@ -34,111 +37,68 @@ local function saveSettings()
   end
 end
 
-local function handleKeypress(event)
-	if (event.phase == 'up' and event.keyName == 'back') then
-		gotoMenu()
-		return true
-	end
+local function createAsteroid(index, offset, points, spin)
+  local asteroid = display.newImageRect(
+		mainGroup,
+		objectSheet,
+		index,
+		sheetOptions.frames[index].width,
+		sheetOptions.frames[index].height
+	)
+  asteroid.x = display.contentCenterX + offset
+  asteroid.y = 90
+  local asteroidPoints = display.newText(
+    mainGroup,
+    points .. 'pts',
+    display.contentCenterX + offset,
+    160,
+    native.systemFont,
+    28
+  )
+  asteroidPoints:setFillColor(0.75, 0.78, 1)
+  physics.addBody(asteroid, 'dynamic', { radius=40, bounce=0.8 })
+	asteroid:applyTorque(math.random(spin,spin))
+  return asteroid
 end
 
 local function createAsteroids()
-	local firstAsteroid = display.newImageRect(
-		mainGroup,
-		objectSheet,
-		1,
-		sheetOptions.frames[1].width,
-		sheetOptions.frames[1].height
-	)
-
-  firstAsteroid.x = display.contentCenterX - 150
-  firstAsteroid.y = 90
-  local firstAsteroidPoints = display.newText(mainGroup, '50pts', display.contentCenterX - 150, 160, native.systemFont, 28)
-  firstAsteroidPoints:setFillColor(0.75, 0.78, 1)
-  physics.addBody(firstAsteroid, 'dynamic', { radius=40, bounce=0.8 })
-	firstAsteroid:applyTorque(math.random(2,2))
-
-  local secondAsteroid = display.newImageRect(
-		mainGroup,
-		objectSheet,
-		2,
-		sheetOptions.frames[2].width,
-		sheetOptions.frames[2].height
-	)
-
-  secondAsteroid.x = display.contentCenterX
-  secondAsteroid.y = 90
-  local secondAsteroidPoints = display.newText(mainGroup, '100pts', display.contentCenterX, 160, native.systemFont, 28)
-  secondAsteroidPoints:setFillColor(0.75, 0.78, 1)
-  physics.addBody(secondAsteroid, 'dynamic', { radius=40, bounce=0.8 })
-  secondAsteroid:applyTorque(math.random(-3,-3))
-
-  local thirdAsteroid = display.newImageRect(
-		mainGroup,
-		objectSheet,
-		3,
-		sheetOptions.frames[3].width,
-		sheetOptions.frames[3].height
-	)
-
-  thirdAsteroid.x = display.contentCenterX + 150
-  thirdAsteroid.y = 90
-  local thirdAsteroidPoints = display.newText(mainGroup, '500pts', display.contentCenterX + 150, 160, native.systemFont, 28)
-  thirdAsteroidPoints:setFillColor(0.75, 0.78, 1)
-  physics.addBody(thirdAsteroid, 'dynamic', { radius=40, bounce=0.8 })
-	thirdAsteroid:applyTorque(math.random(4,4))
+	local firstAsteroid = createAsteroid(1, -150, 50, 2)
+  local secondAsteroid = createAsteroid(2, 0, 100, -3)
+  local secondAsteroid = createAsteroid(3, 150, 500, 4)
 end
 
-local function displayShipChoice()
-  local firstShipOptions = sheetOptions.frames[4]
-	firstShip = display.newImageRect(
+local function displayShipOption(index, engine, weapon)
+  local offset = 200*(index-3)
+  local shipOptions = sheetOptions.frames[index]
+	local shipPreview = display.newImageRect(
 		mainGroup,
 		objectSheet,
-		4,
-		firstShipOptions.width,
-		firstShipOptions.height
+		index,
+		shipOptions.width,
+		shipOptions.height
 	)
 
-  firstShip.x = display.contentCenterX
-  firstShip.y = 260
-  firstShip.shipType = 4
-  local firstShipEngine = display.newText(mainGroup, 'Engine: Average', display.contentCenterX, 330, native.systemFont, 28)
-  local firstShipWeapon = display.newText(mainGroup, 'Weapon: Average', display.contentCenterX, 360, native.systemFont, 28)
-  firstShipEngine:setFillColor(0.75, 0.78, 1)
-  firstShipWeapon:setFillColor(0.75, 0.78, 1)
-
-  local secondShipOptions = sheetOptions.frames[5]
-	secondShip = display.newImageRect(
-		mainGroup,
-		objectSheet,
-		5,
-		secondShipOptions.width,
-		secondShipOptions.height
-	)
-
-  secondShip.x = display.contentCenterX
-  secondShip.y = 460
-  secondShip.shipType = 5
-  local secondShipEngine = display.newText(mainGroup, 'Engine: Fast', display.contentCenterX, 530, native.systemFont, 28)
-  local secondShipWeapon = display.newText(mainGroup, 'Weapon: Slow', display.contentCenterX, 560, native.systemFont, 28)
-  secondShipEngine:setFillColor(0.75, 0.78, 1)
-  secondShipWeapon:setFillColor(0.75, 0.78, 1)
-
-  local thirdShipOptions = sheetOptions.frames[6]
-	thirdShip = display.newImageRect(
-		mainGroup,
-		objectSheet,
-		6,
-		thirdShipOptions.width,
-		thirdShipOptions.height
-	)
-
-  thirdShip.x = display.contentCenterX
-  thirdShip.y = 660
-  thirdShip.shipType = 6
-  local thirdShipEngine = display.newText(mainGroup, 'Engine: Slow', display.contentCenterX, 730, native.systemFont, 28)
-  local thirdShipWeapon = display.newText(mainGroup, 'Weapon: Fast', display.contentCenterX, 760, native.systemFont, 28)
-  thirdShipEngine:setFillColor(0.75, 0.78, 1)
-  thirdShipWeapon:setFillColor(0.75, 0.78, 1)
+  shipPreview.x = display.contentCenterX
+  shipPreview.y = 60 + offset
+  shipPreview.shipType = index
+  local shipEngine = display.newText(
+    mainGroup, 'Engine: ' .. engine,
+    display.contentCenterX,
+    130 + offset,
+    native.systemFont,
+    28
+  )
+  local shipWeapon = display.newText(
+    mainGroup,
+    'Weapon: ' .. weapon,
+    display.contentCenterX,
+    160 + offset,
+    native.systemFont,
+    28
+  )
+  shipEngine:setFillColor(0.75, 0.78, 1)
+  shipWeapon:setFillColor(0.75, 0.78, 1)
+  return shipPreview
 end
 
 local function selectShip(event)
@@ -161,25 +121,24 @@ function scene:create(event)
   mainGroup = display.newGroup()
 	sceneGroup:insert(mainGroup)
   physics.pause()
+	musicTrack = audio.loadStream('audio/Midnight-Crawlers_Looping.wav')
 
 	local background = display.newImageRect(mainGroup, 'background.png', 800, 1400)
-	background.x = display.contentCenterX
-	background.y = display.contentCenterY
+	background.x, background.y = display.contentCenterX, display.contentCenterY
 
 	local menuButton = display.newText(mainGroup, 'Menu', display.contentCenterX, 960, native.systemFont, 44)
   menuButton:setFillColor(0.75, 0.78, 1)
   menuButton:addEventListener('tap', gotoMenu)
 
   createAsteroids()
-  displayShipChoice()
+  firstShip = displayShipOption(4, 'Average', 'Average')
   firstShip:addEventListener('tap', selectShip)
+	secondShip = displayShipOption(5, 'Fast', 'Slow')
   secondShip:addEventListener('tap', selectShip)
+  thirdShip = displayShipOption(6, 'Slow', 'Fast')
   thirdShip:addEventListener('tap', selectShip)
-
   shipHighlight = display.newCircle(mainGroup, display.contentCenterX, (settings.shipType - 3) * 200 + 60, 60)
   shipHighlight:setFillColor(0.25, 0.70, 0.16, 0.15)
-
-	musicTrack = audio.loadStream('audio/Midnight-Crawlers_Looping.wav')
 end
 
 -- show()
@@ -187,13 +146,13 @@ function scene:show(event)
 	local sceneGroup = self.view
 	local phase = event.phase
 
-	if (phase == 'will') then
+	if phase == 'will' then
 		-- Code here runs when the scene is still off screen (but is about to come on screen)
-	elseif (phase == 'did') then
+	elseif phase == 'did' then
 		-- Code here runs when the scene is entirely on screen
     physics.start()
-		Runtime:addEventListener('key', handleKeypress)
 		audio.play(musicTrack, { channel=1, loops=-1 })
+		Runtime:addEventListener('key', handleKeypress)
 	end
 end
 
@@ -202,14 +161,14 @@ function scene:hide(event)
 	local sceneGroup = self.view
 	local phase = event.phase
 
-	if (phase == 'will') then
+	if phase == 'will' then
 		-- Code here runs when the scene is on screen (but is about to go off screen)
-	elseif (phase == 'did') then
+	elseif phase == 'did' then
 		-- Code here runs immediately after the scene goes entirely off screen
     physics.pause()
-		Runtime:removeEventListener('key', handleKeypress)
 		audio.stop(1)
     saveSettings()
+		Runtime:removeEventListener('key', handleKeypress)
 		composer.removeScene('settings')
 	end
 end

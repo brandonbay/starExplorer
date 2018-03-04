@@ -1,29 +1,11 @@
 
 local composer = require('composer')
+local json = require('json')
 local scene = composer.newScene()
 
--- -----------------------------------------------------------------------------------
--- Code outside of the scene event functions below will only be executed ONCE unless
--- the scene is removed entirely (not recycled) via 'composer.removeScene()'
--- -----------------------------------------------------------------------------------
-
-local json = require('json')
+local filePath = system.pathForFile('settings.json', system.DocumentsDirectory)
 local musicTrack
 local settings = {}
-local filePath = system.pathForFile('settings.json', system.DocumentsDirectory)
-
-local function gotoGame()
-    composer.gotoScene('game', { time=800, effect='crossFade' })
-end
-
-local function gotoSettings()
-    composer.gotoScene('settings', { time=800, effect='crossFade' })
-end
-
-local function gotoHighScores()
-    composer.gotoScene('highscores', { time=800, effect='crossFade' })
-end
-
 local sheetOptions = {
 	frames = {
 		{ -- [1] asteroid 1
@@ -53,15 +35,17 @@ local sheetOptions = {
 			width = 98,
 			height = 79,
 			shipSpeed = 300,
-			laserSpeed = 1200
+			laserSpeed = 1200,
+			laserPeriod = 350
 		},
 		{ -- [5] ship2
 			x = 0,
 			y = 344,
 			width = 57,
 			height = 74,
-			shipSpeed = 700,
-			laserSpeed = 800
+			shipSpeed = 600,
+			laserSpeed = 900,
+			laserPeriod = 500
 		},
 		{ -- [6] ship3
 			x = 0,
@@ -69,7 +53,8 @@ local sheetOptions = {
 			width = 112,
 			height = 80,
 			shipSpeed = 75,
-			laserSpeed = 10000
+			laserSpeed = 10000,
+			laserPeriod = 200
 		},
 		{ -- [7] laser
 			x = 98,
@@ -80,18 +65,41 @@ local sheetOptions = {
 	}
 }
 
+local function gotoGame()
+    composer.gotoScene('game', { time=800, effect='crossFade' })
+end
+
+local function gotoSettings()
+    composer.gotoScene('settings', { time=800, effect='crossFade' })
+end
+
+local function gotoHighScores()
+    composer.gotoScene('highscores', { time=800, effect='crossFade' })
+end
+
 local function loadSettings()
 	local file = io.open(filePath, 'r')
-  settings.shipType = 1
 	if file then
 		local contents = file:read('*a')
 		io.close(file)
     settings = json.decode(contents)
 	end
 
-	if (settings == nil or settings == 0) then
+	if not settings or not settings.highScores or not settings.shipType then
 		settings = {}
-		settings.highScores = { 10000, 7500, 5000, 4000, 3000, 2500, 1500, 1000, 750, 500 }
+		settings.shipType = 4
+		settings.highScores = {
+			{ship = 6, score = 10000},
+			{ship = 5, score = 7500},
+			{ship = 4, score = 5000},
+			{ship = 4, score = 4000},
+			{ship = 6, score = 3000},
+			{ship = 4, score = 2500},
+			{ship = 5, score = 1500},
+			{ship = 6, score = 1000},
+			{ship = 4, score = 750},
+			{ship = 4, score = 500}
+		}
 	end
 end
 
@@ -103,20 +111,19 @@ end
 function scene:create(event)
 	local sceneGroup = self.view
 	-- Code here runs when the scene is first created but has not yet appeared on screen
-
   loadSettings()
 
 	composer.setVariable('settings', settings)
   composer.setVariable('filePath', filePath)
 	composer.setVariable('sheetOptions', sheetOptions)
 
+	musicTrack = audio.loadStream('audio/Escape_Looping.wav')
+
 	local background = display.newImageRect(sceneGroup, 'background.png', 800, 1400)
-	background.x = display.contentCenterX
-  background.y = display.contentCenterY
+	background.x, background.y = display.contentCenterX, display.contentCenterY
 
 	local title = display.newImageRect(sceneGroup, 'title.png', 500, 80)
-  title.x = display.contentCenterX
-  title.y = 200
+  title.x, title.y = display.contentCenterX, 200
 
 	local playButton = display.newText(sceneGroup, 'Play', display.contentCenterX, 700, native.systemFont, 44)
   playButton:setFillColor(0.82, 0.86, 1)
@@ -130,7 +137,6 @@ function scene:create(event)
 	playButton:addEventListener('tap', gotoGame)
   settingsButton:addEventListener('tap', gotoSettings)
   highScoresButton:addEventListener('tap', gotoHighScores)
-	musicTrack = audio.loadStream('audio/Escape_Looping.wav')
 end
 
 -- show()
@@ -138,9 +144,9 @@ function scene:show(event)
 	local sceneGroup = self.view
 	local phase = event.phase
 
-	if (phase == 'will') then
+	if phase == 'will' then
 		-- Code here runs when the scene is still off screen (but is about to come on screen)
-	elseif (phase == 'did') then
+	elseif phase == 'did' then
 		-- Code here runs when the scene is entirely on screen
 		audio.play(musicTrack, { channel=1, loops=-1 })
 	end
@@ -151,9 +157,9 @@ function scene:hide(event)
 	local sceneGroup = self.view
 	local phase = event.phase
 
-	if (phase == 'will') then
+	if phase == 'will' then
 		-- Code here runs when the scene is on screen (but is about to go off screen)
-	elseif (phase == 'did') then
+	elseif phase == 'did' then
 		-- Code here runs immediately after the scene goes entirely off screen
 		audio.stop(1)
 	end
