@@ -9,20 +9,9 @@ local scene = composer.newScene()
 
 local json = require('json')
 local scoresTable = {}
-local filePath = system.pathForFile('scores.json', system.DocumentsDirectory)
+local settings = composer.getVariable('settings')
+local filePath = composer.getVariable('filePath')
 local musicTrack
-
-local function loadScores()
-	local file = io.open(filePath, 'r')
-	if file then
-		local contents = file:read('*a')
-		io.close(file)
-		scoresTable = json.decode(contents)
-	end
-	if (scoresTable == nil or scoresTable == 0 or scoresTable[1] == 0) then
-		scoresTable = { 10000, 7500, 5000, 4000, 3000, 2500, 1500, 1000, 750, 500 }
-	end
-end
 
 local function saveScores()
   for i = #scoresTable, 11, -1 do
@@ -31,8 +20,10 @@ local function saveScores()
 
   local file = io.open(filePath, 'w')
 
-  if file then
-    file:write(json.encode(scoresTable))
+  if file and settings then
+		print('saving')
+		settings.highScores = scoresTable
+    file:write(json.encode(settings))
     io.close(file)
   end
 end
@@ -56,16 +47,19 @@ end
 function scene:create(event)
 	local sceneGroup = self.view
 	-- Code here runs when the scene is first created but has not yet appeared on screen
-	loadScores()
-	table.insert(scoresTable, composer.getVariable('finalScore'))
-  composer.setVariable('finalScore', 0)
+	scoresTable = settings and settings.highScores or {}
+	local finalScore = composer.getVariable('finalScore')
+	if (finalScore and finalScore > 0) then
+		table.insert(scoresTable, finalScore)
+  	composer.setVariable('finalScore', 0)
 
-	local function compare(a, b)
-    return a > b
-  end
-  table.sort(scoresTable, compare)
+		local function compare(a, b)
+	    return a > b
+	  end
+	  table.sort(scoresTable, compare)
 
-	saveScores()
+		saveScores()
+	end
 
 	local background = display.newImageRect(sceneGroup, 'background.png', 800, 1400)
 	background.x = display.contentCenterX
@@ -84,7 +78,7 @@ function scene:create(event)
     end
   end
 
-	local menuButton = display.newText(sceneGroup, 'Menu', display.contentCenterX, 810, native.systemFont, 44)
+	local menuButton = display.newText(sceneGroup, 'Menu', display.contentCenterX, 860, native.systemFont, 44)
   menuButton:setFillColor(0.75, 0.78, 1)
   menuButton:addEventListener('tap', gotoMenu)
 

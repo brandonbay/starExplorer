@@ -7,45 +7,25 @@ local scene = composer.newScene()
 -- the scene is removed entirely (not recycled) via 'composer.removeScene()'
 -- -----------------------------------------------------------------------------------
 
+-- returns the degrees between (0,0) and pt (note: 0 degrees is 'east')
+math.angleOf = function(point)
+   local x, y = point.x, point.y
+   local angle = math.atan2(y,x)*180/math.pi
+   if angle < 0 then angle = 360 + angle end
+   return angle
+end
+
+-- returns the degrees between two points (note: 0 degrees is 'east')
+math.angleBetween = function(point1, point2)
+   local x, y = point2.x - point1.x, point2.y - point1.y
+   return math.angleOf( { x=x, y=y } )
+end
+
 local physics = require('physics')
 physics.start()
 physics.setGravity(0,0)
-
-local sheetOptions = {
-	frames = {
-		{ -- [1] asteroid 1
-			x = 0,
-			y = 0,
-			width = 102,
-			height = 85
-		},
-		{ -- [2] asteroid 2
-			x = 0,
-			y = 85,
-			width = 90,
-			height = 83
-		},
-		{ -- [3] asteroid 3
-			x = 0,
-			y = 168,
-			width = 100,
-			height = 97
-		},
-		{ -- [4] ship
-			x = 0,
-			y = 265,
-			width = 98,
-			height = 79
-		},
-		{ -- [5] laser
-			x = 98,
-			y = 265,
-			width = 14,
-			height = 40
-		}
-	}
-}
-
+local settings = composer.getVariable('settings')
+local sheetOptions = composer.getVariable('sheetOptions')
 local objectSheet = graphics.newImageSheet( 'gameObjects.png', sheetOptions )
 
 local lives = 3
@@ -55,9 +35,8 @@ local died = false
 local asteroidsTable = {}
 
 local ship
-local shipVelocityX = 0
-local shipVelocityY = 0
-local shipSpeed = 300
+local shipVelocityX, shipVelocityY  = 0, 0
+local laserVelocityX, laserVelocityY  = 0, -10
 local gameLoopTimer
 local livesText
 local scoreText
@@ -76,7 +55,15 @@ local function updateText()
 end
 
 local function createAsteroid()
-	local asteroidType = math.random(3)
+	local asteroidType = math.random(12)
+	if (asteroidType < 8) then
+		asteroidType = 1
+	elseif (asteroidType < 12) then
+		asteroidType = 2
+	elseif (asteroidType == 12) then
+		asteroidType = 3
+	end
+
 	local newAsteroid = display.newImageRect(
 		mainGroup,
 		objectSheet,
@@ -87,60 +74,93 @@ local function createAsteroid()
 	table.insert(asteroidsTable, newAsteroid)
 	physics.addBody(newAsteroid, 'dynamic', { radius=40, bounce=0.8 })
 	newAsteroid.myName = 'asteroid'
+	newAsteroid.points = sheetOptions.frames[asteroidType].points
 
 	local whereFrom = math.random(3)
 
-	if ( whereFrom == 1 ) then
+	if (whereFrom == 1) then
 		-- From the left
 		newAsteroid.x = -60
 		newAsteroid.y = math.random(500)
 		newAsteroid:setLinearVelocity(math.random(40,120), math.random(20,60))
-	elseif ( whereFrom == 2 ) then
-			-- From the top
-			newAsteroid.x = math.random(display.contentWidth)
-			newAsteroid.y = -60
-			newAsteroid:setLinearVelocity(math.random(-40,40), math.random(40,120))
-	elseif ( whereFrom == 3 ) then
-			-- From the right
-			newAsteroid.x = display.contentWidth + 60
-			newAsteroid.y = math.random(500)
-			newAsteroid:setLinearVelocity(math.random(-120,-40), math.random(20,60))
+	elseif (whereFrom == 2) then
+		-- From the top
+		newAsteroid.x = math.random(display.contentWidth)
+		newAsteroid.y = -60
+		newAsteroid:setLinearVelocity(math.random(-40,40), math.random(40,120))
+	elseif (whereFrom == 3) then
+		-- From the right
+		newAsteroid.x = display.contentWidth + 60
+		newAsteroid.y = math.random(500)
+		newAsteroid:setLinearVelocity(math.random(-120,-40), math.random(20,60))
 	end
 
-	newAsteroid:applyTorque( math.random(-6,6) )
+	newAsteroid:applyTorque(math.random(-6,6))
 end
 
 local function fireLaser()
+	if (died == false) then
 		audio.play(fireSound)
 
-		local newLaser = display.newImageRect(mainGroup, objectSheet, 5, 14, 40)
+		local newLaser = display.newImageRect(mainGroup, objectSheet, 7, 14, 40)
 		physics.addBody( newLaser, 'dynamic', { isSensor=true } )
 		newLaser.isBullet = true
 		newLaser.myName = 'laser'
 
 		newLaser.x = ship.x
 		newLaser.y = ship.y
+		newLaser.rotation = ship.rotation
 		newLaser:toBack()
 
-		transition.to(newLaser, { y=-40, time=500,
-			onComplete = function() display.remove(newLaser) end
-		})
+		newLaser:setLinearVelocity(ship.laserSpeed * laserVelocityX, ship.laserSpeed * laserVelocityY)
+
+		timer.performWithDelay( 500, function() display.remove(newLaser) end)
+	end
+end
+
+local function checkShipInBounds()
+	if (died == false) then
+		if ((shipVelocityX > 0 and ship.x >= (display.contentWidth - 140)) or
+			(shipVelocityX < 0 and ship.x <= 140)) then
+			shipVelocityX = 0
+		end
+		if ((shipVelocityY > 0 and ship.y >= (display.contentHeight - 40)) or
+			(shipVelocityY < 0 and ship.y <= 40)) then
+			shipVelocityY = 0
+		end
+	end
+	return true
 end
 
 local function dragShip(event)
-		local ship = event.target
 		local phase = event.phase
+		local xDistance, yDistance
+
+		if (died == true) then
+			return true
+		end
 
 		if (phase == 'began') then
 			display.currentStage:setFocus(ship)
-			ship.touchOffsetX = event.x - ship.x
-			ship.touchOffsetY = event.y - ship.y
-		elseif (phase == 'moved') then
-			ship.x = event.x - ship.touchOffsetX
-			ship.y = event.y - ship.touchOffsetY
-		elseif (phase == 'ended' or phase == 'cancelled') then
-			display.currentStage:setFocus(nil)
 		end
+
+		if (phase == 'began' or phase == 'moved') then
+			xDistance, yDistance = event.x - ship.x, event.y - ship.y
+			if (math.abs(xDistance) >= 80 or math.abs(yDistance) >= 80) then
+				ship.rotation = math.angleBetween(ship, event) + 90
+				local shipAngle = math.atan2(yDistance, xDistance)
+				shipVelocityX, shipVelocityY = math.cos(shipAngle), math.sin(shipAngle)
+				laserVelocityX, laserVelocityY = shipVelocityX, shipVelocityY
+			end
+		end
+
+		if (phase == 'ended' or phase == 'cancelled') then
+			display.currentStage:setFocus(nil)
+			shipVelocityX, shipVelocityY = 0, 0
+		end
+
+		checkShipInBounds()
+		ship:setLinearVelocity(ship.shipSpeed * shipVelocityX, ship.shipSpeed * shipVelocityY)
 
 		return true
 end
@@ -155,30 +175,33 @@ local function handleKeypress(event)
 		endGame()
 		return true
 	elseif (event.phase == 'up' and event.keyName == 'space') then
-		fireLaser()
+		if (died == false) then
+			fireLaser()
+		end
 		return true
 	elseif (event.phase == 'down') then
 		if (event.keyName == 'left') then
-			shipVelocityX = shipVelocityX - shipSpeed
+			shipVelocityX = shipVelocityX - ship.shipSpeed
 		elseif (event.keyName == 'right') then
-			shipVelocityX = shipVelocityX + shipSpeed
+			shipVelocityX = shipVelocityX + ship.shipSpeed
 		elseif (event.keyName == 'up') then
-			shipVelocityY = shipVelocityY - shipSpeed
+			shipVelocityY = shipVelocityY - ship.shipSpeed
 		elseif (event.keyName == 'down') then
-			shipVelocityY = shipVelocityY + shipSpeed
+			shipVelocityY = shipVelocityY + ship.shipSpeed
 		end
 	elseif (event.phase == 'up') then
-		if (event.keyName == 'left') then
-			shipVelocityX = shipVelocityX + shipSpeed
-		elseif (event.keyName == 'right') then
-			shipVelocityX = shipVelocityX - shipSpeed
-		elseif (event.keyName == 'up') then
-			shipVelocityY = shipVelocityY + shipSpeed
-		elseif (event.keyName == 'down') then
-			shipVelocityY = shipVelocityY - shipSpeed
+		if (event.keyName == 'left' and shipVelocityX < 0) then
+			shipVelocityX = shipVelocityX + ship.shipSpeed
+		elseif (event.keyName == 'right' and shipVelocityX > 0) then
+			shipVelocityX = shipVelocityX - ship.shipSpeed
+		elseif (event.keyName == 'up' and shipVelocityY < 0) then
+			shipVelocityY = shipVelocityY + ship.shipSpeed
+		elseif (event.keyName == 'down' and shipVelocityY > 0) then
+			shipVelocityY = shipVelocityY - ship.shipSpeed
 		end
 	end
 	if (died == false) then
+		checkShipInBounds()
 		ship:setLinearVelocity(shipVelocityX, shipVelocityY)
 	end
 	return true
@@ -188,6 +211,11 @@ local function restoreShip()
 	ship.isBodyActive = false
 	ship.x = display.contentCenterX
 	ship.y = display.contentHeight - 100
+
+	shipVelocityX, shipVelocityY = 0, 0
+	laserVelocityX, laserVelocityY = 0, -10
+	ship.rotation = 0
+	ship:setLinearVelocity(shipVelocityX, shipVelocityY)
 
 	transition.to(ship, {alpha=1, time=4000,
 		onComplete=function()
@@ -201,6 +229,7 @@ local function onCollision(event)
 	if (event.phase == 'began') then
 		local obj1 = event.object1
 		local obj2 = event.object2
+
 		if (
 			(obj1.myName == 'laser' and obj2.myName == 'asteroid') or
 			(obj1.myName == 'asteroid' and obj2.myName == 'laser')
@@ -209,7 +238,9 @@ local function onCollision(event)
 			display.remove(obj2)
 			audio.play(explosionSound)
 
-			score = score + 100
+			local asteroid = obj1.myName == 'asteroid' and obj1 or obj2
+
+			score = score + asteroid.points
 			scoreText.text = 'Score: ' .. score
 
 			for i = #asteroidsTable, 1, -1 do
@@ -279,17 +310,20 @@ function scene:create(event)
 	background.x = display.contentCenterX
 	background.y = display.contentCenterY
 
-	ship = display.newImageRect(mainGroup, objectSheet, 4, 98, 79)
+	local shipType = settings and settings.shipType or 4
+	local shipOptions = sheetOptions.frames[shipType]
+	ship = display.newImageRect(mainGroup, objectSheet, shipType, shipOptions.width, shipOptions.height)
 	ship.x = display.contentCenterX
 	ship.y = display.contentHeight - 100
 	physics.addBody (ship, {radius=30, isSensor=true})
 	ship.myName = 'ship'
+	ship.shipSpeed = shipOptions.shipSpeed
+	ship.laserSpeed = shipOptions.laserSpeed
 
 	livesText = display.newText(uiGroup, 'Lives: ' .. lives, 200, 80, native.systemFont, 36)
 	scoreText = display.newText(uiGroup, 'Score: ' .. score, 400, 80, native.systemFont, 36)
 
 	ship:addEventListener('tap', fireLaser)
-	ship:addEventListener('touch', dragShip)
 
 	explosionSound = audio.loadSound('audio/explosion.wav')
 	fireSound = audio.loadSound('audio/fire.wav')
@@ -308,7 +342,10 @@ function scene:show(event)
 		physics.start()
 		Runtime:addEventListener('key', handleKeypress)
 		Runtime:addEventListener('collision', onCollision)
+		Runtime:addEventListener('touch', dragShip)
+		Runtime:addEventListener('enterFrame', checkShipInBounds)
 		gameLoopTimer = timer.performWithDelay(750, gameLoop, 0)
+		audio.setVolume(0.25, { channel=1 })
 		audio.play(musicTrack, { channel=1, loops=-1 })
 	end
 end
@@ -325,8 +362,11 @@ function scene:hide(event)
 		-- Code here runs immediately after the scene goes entirely off screen
 		Runtime:removeEventListener('collision', onCollision)
 		Runtime:removeEventListener('key', handleKeypress)
+		Runtime:removeEventListener('touch', dragShip)
+		Runtime:removeEventListener('enterFrame', checkShipInBounds)
 		physics.pause()
 		audio.stop(1)
+		audio.setVolume(0.5, { channel=1 })
 		composer.removeScene('game')
 	end
 end
